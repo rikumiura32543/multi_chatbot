@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - マルチチャットボットRAGシステム</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>マルチチャットボットRAGシステム</h1>
+            <div class="header-actions">
+                <button id="createBtn" class="btn btn-primary" onclick="createNewChatbot()">
+                    新規作成
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+
+        <main>
+            <div class="card">
+                <h2>チャットボット選択</h2>
+                <p class="text-muted">最大5つのチャットボットを管理・運用できる汎用RAGシステム</p>
+
+                <div class="chatbot-grid" id="chatbotGrid">
+                    <!-- チャットボット一覧がここに表示される -->
+                    <div class="loading-container">
+                        <div class="spinner"></div>
+                        <p>チャットボット一覧を読み込み中...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>システム情報</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number">qwen2:7b</span>
+                        <span>LLMモデル</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">5</span>
+                        <span>最大チャットボット数</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">3</span>
+                        <span>対応ファイル形式</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">✓</span>
+                        <span>iframe埋め込み</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 新規作成モーダル -->
+    <div id="createModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">新規チャットボット作成</h3>
+                <button class="modal-close" onclick="closeCreateModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="createForm" onsubmit="submitCreateForm(event)">
+                    <div class="form-group">
+                        <label class="form-label" for="chatbotName">チャットボット名 *</label>
+                        <input class="form-input" type="text" id="chatbotName" name="name" required 
+                               placeholder="例: 技術サポートボット" maxlength="50">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="chatbotDescription">説明（任意）</label>
+                        <textarea class="form-textarea" id="chatbotDescription" name="description" 
+                                  placeholder="このチャットボットの用途や特徴を説明してください..." 
+                                  rows="3" maxlength="200"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeCreateModal()">
+                    キャンセル
+                </button>
+                <button type="submit" form="createForm" class="btn btn-primary">
+                    作成
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 削除確認モーダル -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">チャットボット削除</h3>
+                <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>このチャットボットを削除してもよろしいですか？</p>
+                <div class="card bg-light">
+                    <p><strong>チャットボット名:</strong> <span id="deleteTargetName"></span></p>
+                    <p class="text-danger">
+                        注意: 削除すると以下のデータが完全に失われます：
+                    </p>
+                    <ul>
+                        <li>RAG設定とベクトルデータベース</li>
+                        <li>アップロードされた文書</li>
+                        <li>会話履歴（存在する場合）</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeDeleteModal()">
+                    キャンセル
+                </button>
+                <button type="button" class="btn btn-danger" onclick="confirmDelete()">
+                    削除実行
+                </button>
+        </div>
+    </div>
+
+    <script src="/static/js/chat_selection.js"></script>
+</body>
+</html>

@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - RAGチャットボット</title>
+    <link href="/static/css/styles.css" rel="stylesheet">
+</head>
+<body>
+    <div class="chat-container">
+        <!-- チャットヘッダー -->
+        <div class="chat-header">
+            <div>
+                <h2 style="margin: 0;">{{ title }}</h2>
+                <div style="font-size: 0.9em; opacity: 0.9;" id="chatbotInfo">読み込み中...</div>
+            </div>
+            <div style="display: flex; gap: var(--spacing-sm);">
+                <button onclick="showEmbedModal()" class="btn" style="color: var(--color-black); background: var(--color-white);">
+                    埋め込みコード
+                </button>
+                <button onclick="location.href='/settings/{{ chatbot_id }}'" class="btn" style="color: var(--color-black); background: var(--color-white);">
+                    RAG設定
+                </button>
+                <button onclick="location.href='/'" class="btn" style="color: var(--color-black); background: var(--color-white);">
+                    ホーム
+                </button>
+            </div>
+        </div>
+
+        <!-- チャットメッセージ -->
+        <div class="chat-messages" id="chatMessages">
+            <div class="loading-container" id="welcomeMessage">
+                <h3>チャットボットとの対話を開始しましょう</h3>
+                <p>下のテキストボックスに質問を入力してください。<br>
+                RAG機能により、アップロードされた文書に基づいて回答します。</p>
+            </div>
+        </div>
+
+
+        <!-- チャット入力 -->
+        <div class="chat-input-container">
+            <textarea 
+                id="chatInput" 
+                class="chat-input" 
+                placeholder="メッセージを入力してください..."
+                rows="1"
+                onkeydown="handleKeyDown(event)"
+                oninput="autoResize(this)"
+            ></textarea>
+            <button id="sendButton" class="send-button" onclick="sendMessage()">
+                送信
+            </button>
+        </div>
+
+        <!-- 埋め込みコードモーダル -->
+        <div id="embedModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>チャットボット埋め込みコード</h3>
+                    <button class="modal-close" onclick="hideEmbedModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p>以下のコードをWebサイトに埋め込むことで、このチャットボットを表示できます：</p>
+                    
+                    <div class="code-container">
+                        <label>iframe埋め込みコード:</label>
+                        <textarea id="embedCode" class="code-textarea" readonly></textarea>
+                        <button class="btn btn-primary btn-full-width" onclick="copyEmbedCode()">
+                            コードをコピー
+                        </button>
+                    </div>
+
+                    <div class="code-container">
+                        <label>JavaScript埋め込みコード:</label>
+                        <textarea id="jsEmbedCode" class="code-textarea" readonly></textarea>
+                        <button class="btn btn-primary btn-full-width" onclick="copyJSEmbedCode()">
+                            JavaScriptコードをコピー
+                        </button>
+                    </div>
+
+                    <div class="card bg-light">
+                        <h4>埋め込みオプション</h4>
+                        <div class="form-group">
+                            <label>幅:</label>
+                            <input type="text" id="embedWidth" value="100%" onchange="updateEmbedCode()">
+                        </div>
+                        <div class="form-group">
+                            <label>高さ:</label>
+                            <input type="text" id="embedHeight" value="600px" onchange="updateEmbedCode()">
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enableFullscreen" checked onchange="updateEmbedCode()">
+                                フルスクリーン許可
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatbotId = '{{ chatbot_id }}';
+        let conversationHistory = [];
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadChatbotInfo();
+            loadConversationHistory();
+            document.getElementById('chatInput').focus();
+        });
+
+        // チャットボット情報読み込み
+        async function loadChatbotInfo() {
+            try {
+                const response = await fetch(`/api/chatbots/${chatbotId}`);
+                if (response.ok) {
+                    const chatbot = await response.json();
+                    document.getElementById('chatbotInfo').textContent = 
+                        `${chatbot.name} | RAG: ${chatbot.rag_configured ? '有効' : '無効'}`;
+                } else {
+                    document.getElementById('chatbotInfo').textContent = 'チャットボット情報の読み込みに失敗しました';
+                }
+            } catch (error) {
+                console.error('チャットボット情報の読み込みエラー:', error);
+                document.getElementById('chatbotInfo').textContent = 'エラーが発生しました';
+            }
+        }
+
+        // 会話履歴読み込み
+        async function loadConversationHistory() {
+            try {
+                const response = await fetch(`/api/chat/${chatbotId}/history`);
+                if (response.ok) {
+                    const historyData = await response.json();
+                    console.log('History data received:', historyData);
+                    
+                    // historyDataは { messages: [...], total_messages: ..., ... } の形式
+                    const messages = historyData.messages || [];
+                    
+                    if (messages.length > 0) {
+                        document.getElementById('welcomeMessage').style.display = 'none';
+                        messages.forEach(message => {
+                            displayMessage(message.content, message.role, message.rag_sources, false);
+                        });
+                        scrollToBottom();
+                    }
+                    
+                    // conversationHistoryにはmessages配列のみを設定
+                    conversationHistory = messages;
+                    console.log('Conversation history set:', conversationHistory);
+                }
+            } catch (error) {
+                console.error('会話履歴の読み込みエラー:', error);
+            }
+        }
+
+        // キーボードイベント処理
+        function handleKeyDown(event) {
+            // 日本語入力中（変換中）の場合は送信しない
+            if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // テキストエリアの自動リサイズ
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        }
+
+        // メッセージ送信
+        async function sendMessage() {
+            console.log('sendMessage called');
+            const input = document.getElementById('chatInput');
+            const sendButton = document.getElementById('sendButton');
+            const message = input.value.trim();
+
+            console.log('Message to send:', message);
+            console.log('Chatbot ID:', chatbotId);
+
+            if (!message) {
+                console.log('Empty message, returning');
+                return;
+            }
+
+            // UI更新
+            input.value = '';
+            input.style.height = 'auto';
+            sendButton.disabled = true;
+            document.getElementById('welcomeMessage').style.display = 'none';
+
+            // ユーザーメッセージ表示
+            displayMessage(message, 'user');
+            
+            // タイピングインジケーター表示
+            showTypingIndicator();
+
+            try {
+                // リクエストデータの準備
+                const requestData = {
+                    message: message,
+                    conversation_history: conversationHistory
+                };
+                console.log('Request data:', requestData);
+                
+                // タイムアウト制御用のAbortController
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 120000); // 2分タイムアウト
+                
+                const apiUrl = `/api/chat/${chatbotId}/message`;
+                console.log('Making request to:', apiUrl);
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData),
+                    signal: controller.signal
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
+                
+                clearTimeout(timeoutId);
+
+                hideTypingIndicator();
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Chat response received:', result);
+                    
+                    // レスポンスの検証
+                    if (!result || typeof result.response !== 'string') {
+                        console.error('Invalid response format:', result);
+                        displayErrorMessage('無効な応答形式が返されました');
+                        return;
+                    }
+                    
+                    // アシスタントの応答表示
+                    displayMessage(result.response, 'assistant', result.rag_sources);
+                    
+                    // 会話履歴に追加
+                    conversationHistory.push(
+                        { role: 'user', content: message },
+                        { role: 'assistant', content: result.response, rag_sources: result.rag_sources }
+                    );
+                } else {
+                    let errorMessage = 'エラーが発生しました';
+                    try {
+                        const error = await response.json();
+                        if (typeof error.detail === 'string') {
+                            errorMessage = error.detail;
+                        } else if (typeof error.message === 'string') {
+                            errorMessage = error.message;
+                        } else if (typeof error.detail === 'object') {
+                            errorMessage = JSON.stringify(error.detail);
+                        } else if (typeof error.message === 'object') {
+                            errorMessage = JSON.stringify(error.message);
+                        } else {
+                            errorMessage = `HTTPエラー: ${response.status}`;
+                        }
+                    } catch (e) {
+                        errorMessage = `HTTPエラー: ${response.status} ${response.statusText}`;
+                    }
+                    displayErrorMessage(errorMessage);
+                }
+            } catch (error) {
+                hideTypingIndicator();
+                console.error('メッセージ送信エラー:', error);
+                let errorMsg = '通信エラーが発生しました';
+                
+                if (error.name === 'AbortError') {
+                    errorMsg = 'リクエストがタイムアウトしました。時間をおいて再度お試しください。';
+                } else if (error && typeof error.message === 'string') {
+                    errorMsg = error.message;
+                } else if (error && typeof error === 'string') {
+                    errorMsg = error;
+                }
+                displayErrorMessage(errorMsg);
+            } finally {
+                sendButton.disabled = false;
+                input.focus();
+            }
+        }
+
+        // メッセージ表示
+        function displayMessage(content, role, ragSources = null, scroll = true) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+
+            // コンテンツが文字列でない場合の対処
+            let safeContent = content;
+            if (typeof content !== 'string') {
+                console.warn('Non-string content received:', content);
+                safeContent = String(content);
+            }
+
+            let messageHTML = `<div class="message-content">${formatMessage(safeContent)}</div>`;
+            
+            // RAGソース情報を表示
+            if (ragSources && ragSources.length > 0) {
+                messageHTML += `
+                    <div class="card bg-light mt-1">
+                        <strong>参考文書:</strong>
+                        <div class="flex-center gap-1 mt-1">
+                            ${ragSources.map(source => `<span class="btn btn-small text-primary">${source}</span>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            messageHTML += `<div class="message-metadata">${new Date().toLocaleTimeString('ja-JP')}</div>`;
+            messageDiv.innerHTML = messageHTML;
+
+            messagesContainer.appendChild(messageDiv);
+
+            if (scroll) {
+                scrollToBottom();
+            }
+        }
+
+        // エラーメッセージ表示
+        function displayErrorMessage(message) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'notification error';
+            errorDiv.innerHTML = `<strong>エラー:</strong> ${message}`;
+            messagesContainer.appendChild(errorDiv);
+            scrollToBottom();
+            
+            // 5秒後に自動で削除
+            setTimeout(() => {
+                if (errorDiv.parentNode) {
+                    errorDiv.remove();
+                }
+            }, 5000);
+        }
+
+        // タイピングインジケーター表示/非表示
+        function showTypingIndicator() {
+            const messagesContainer = document.getElementById('chatMessages');
+            const indicatorDiv = document.createElement('div');
+            indicatorDiv.id = 'typingIndicator';
+            indicatorDiv.className = 'message assistant';
+            indicatorDiv.innerHTML = '<div class="loading-container"><div class="spinner"></div><p>回答を生成中...</p></div>';
+            messagesContainer.appendChild(indicatorDiv);
+            scrollToBottom();
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        // メッセージフォーマット
+        function formatMessage(message) {
+            // 入力値の安全性チェック
+            if (!message || typeof message !== 'string') {
+                console.warn('Invalid message format in formatMessage:', message);
+                return String(message || '');
+            }
+            
+            // 簡単なマークダウン風フォーマット
+            return message
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\n/g, '<br>');
+        }
+
+        // 最下部へスクロール
+        function scrollToBottom() {
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // 会話クリア（開発用）
+        function clearConversation() {
+            if (confirm('会話履歴をクリアしますか？')) {
+                conversationHistory = [];
+                document.getElementById('chatMessages').innerHTML = '';
+                document.getElementById('welcomeMessage').style.display = 'block';
+                document.getElementById('chatMessages').appendChild(document.getElementById('welcomeMessage'));
+            }
+        }
+
+        // 埋め込みコードモーダル表示
+        function showEmbedModal() {
+            console.log('showEmbedModal called'); // デバッグ用
+            updateEmbedCode();
+            const modal = document.getElementById('embedModal');
+            console.log('modal element:', modal); // デバッグ用
+            if (modal) {
+                modal.style.display = 'block';
+                document.body.style.overflow = 'hidden';
+            } else {
+                console.error('embedModal element not found');
+            }
+        }
+
+        // 埋め込みコードモーダル非表示
+        function hideEmbedModal() {
+            document.getElementById('embedModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // 埋め込みコード更新
+        function updateEmbedCode() {
+            console.log('updateEmbedCode called'); // デバッグ用
+            const currentOrigin = window.location.origin;
+            const widthElement = document.getElementById('embedWidth');
+            const heightElement = document.getElementById('embedHeight');
+            const fullscreenElement = document.getElementById('enableFullscreen');
+            
+            console.log('Form elements:', { widthElement, heightElement, fullscreenElement }); // デバッグ用
+            
+            const width = widthElement ? widthElement.value : '100%';
+            const height = heightElement ? heightElement.value : '600px';
+            const fullscreen = fullscreenElement ? fullscreenElement.checked : true;
+            
+            const embedUrl = `${currentOrigin}/embed/${chatbotId}`;
+            
+            // iframe埋め込みコード
+            const allowFullscreen = fullscreen ? ' allowfullscreen' : '';
+            const iframeCode = `<iframe 
+    src="${embedUrl}" 
+    width="${width}" 
+    height="${height}" 
+    frameborder="0"
+    style="border: 1px solid #ddd; border-radius: 8px;"${allowFullscreen}>
+</iframe>`;
+
+            // JavaScript埋め込みコード
+            const jsCode = `<div id="chatbot-container" style="width: ${width}; height: ${height};"></div>
+<script>
+(function() {
+    var iframe = document.createElement('iframe');
+    iframe.src = '${embedUrl}';
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '1px solid #ddd';
+    iframe.style.borderRadius = '8px';
+    iframe.frameBorder = '0';${fullscreen ? '\n    iframe.allowFullscreen = true;' : ''}
+    document.getElementById('chatbot-container').appendChild(iframe);
+})();
+<\\/script>`;
+
+            document.getElementById('embedCode').value = iframeCode;
+            document.getElementById('jsEmbedCode').value = jsCode;
+        }
+
+        // iframe埋め込みコードをコピー
+        async function copyEmbedCode() {
+            const codeTextarea = document.getElementById('embedCode');
+            try {
+                await navigator.clipboard.writeText(codeTextarea.value);
+                showNotification('iframe埋め込みコードをコピーしました');
+            } catch (err) {
+                // fallback for older browsers
+                codeTextarea.select();
+                document.execCommand('copy');
+                showNotification('iframe埋め込みコードをコピーしました');
+            }
+        }
+
+        // JavaScript埋め込みコードをコピー
+        async function copyJSEmbedCode() {
+            const codeTextarea = document.getElementById('jsEmbedCode');
+            try {
+                await navigator.clipboard.writeText(codeTextarea.value);
+                showNotification('JavaScript埋め込みコードをコピーしました');
+            } catch (err) {
+                // fallback for older browsers
+                codeTextarea.select();
+                document.execCommand('copy');
+                showNotification('JavaScript埋め込みコードをコピーしました');
+            }
+        }
+
+        // 通知表示
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.className = 'notification success';
+            notification.textContent = message;
+            notification.style.position = 'fixed';
+            notification.style.top = '20px';
+            notification.style.right = '20px';
+            notification.style.zIndex = '10000';
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 3000);
+        }
+
+        // モーダル外クリックで閉じる
+        document.addEventListener('click', function(event) {
+            const modal = document.getElementById('embedModal');
+            if (event.target === modal) {
+                hideEmbedModal();
+            }
+        });
+
+        // ESCキーでモーダルを閉じる
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                hideEmbedModal();
+            }
+        });
+    </script>
+</body>
+</html>

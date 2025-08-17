@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# uv
+.venv/
+uv.lock
+
+# データファイル
+data/vectorstore/
+data/models/
+logs/
+*.db
+*.sqlite
+
+# Streamlit
+.streamlit/
+
+# 環境設定
+.env
+.env.local
+.env.*.local
+
+# Nix
+result
+result-*
+
+# direnv
+.envrc.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+
+# Claude Code and Serena directories
+.claude/
+.serena/

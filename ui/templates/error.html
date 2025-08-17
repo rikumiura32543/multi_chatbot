@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>エラーが発生しました - RAGチャットボット</title>
+    <link href="/static/css/styles.css" rel="stylesheet">
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-content">
+            <!-- エラーアイコン（CSVアイコンで代替） -->
+            <div class="error-icon">
+                <div class="error-symbol">!</div>
+            </div>
+            
+            <div class="error-info">
+                <h1 class="error-title">{{ title | default("エラーが発生しました") }}</h1>
+                <p class="error-message">{{ message | default("申し訳ございませんが、処理中にエラーが発生しました。しばらく時間をおいて再度お試しください。") }}</p>
+                
+                {% if details %}
+                <div class="error-details">
+                    <strong>詳細:</strong> {{ details }}
+                </div>
+                {% endif %}
+                
+                {% if error_code %}
+                <div class="error-code">
+                    エラーコード: {{ error_code }}
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="error-actions">
+                <!-- 埋め込みコンテキストの判定 -->
+                <script>
+                    const isEmbedded = (window !== window.top) || 
+                                     (document.referrer && document.referrer.includes('/embed/')) ||
+                                     (window.location.pathname.includes('/embed/'));
+                    
+                    if (isEmbedded) {
+                        // 埋め込みコンテキストの場合
+                        document.write(`
+                            <button onclick="goToChat()" class="btn btn-primary">
+                                チャットに戻る
+                            </button>
+                            <button onclick="window.location.reload()" class="btn" style="color: var(--color-black); background: var(--color-white);">
+                                再読み込み
+                            </button>
+                        `);
+                    } else {
+                        // ブラウザ実行の場合
+                        document.write(`
+                            <button onclick="window.location.href='/'" class="btn btn-primary">
+                                ホームに戻る
+                            </button>
+                            <button onclick="window.history.back()" class="btn" style="color: var(--color-black); background: var(--color-white);">
+                                前のページに戻る
+                            </button>
+                            <button onclick="window.location.reload()" class="btn" style="color: var(--color-black); background: var(--color-white);">
+                                再読み込み
+                            </button>
+                        `);
+                    }
+                </script>
+                
+                <!-- フォールバック（JavaScriptが無効な場合） -->
+                <noscript>
+                    <button onclick="window.location.href='/'" class="btn btn-primary">
+                        ホームに戻る
+                    </button>
+                    <button onclick="window.location.reload()" class="btn" style="color: var(--color-black); background: var(--color-white);">
+                        再読み込み
+                    </button>
+                </noscript>
+            </div>
+            
+            <div class="error-support">
+                <p>問題が継続する場合は、システム管理者にお問い合わせください。</p>
+                <div class="error-timestamp">
+                    発生時刻: <span id="errorTime"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // エラー発生時刻を表示
+        document.getElementById('errorTime').textContent = new Date().toLocaleString('ja-JP');
+        
+        // 埋め込みコンテキストでのチャット戻り機能
+        function goToChat() {
+            const pathParts = window.location.pathname.split('/');
+            const chatbotId = pathParts[pathParts.indexOf('embed') + 1] || 
+                              '{{ chatbot_id }}' ||
+                              localStorage.getItem('lastChatbotId');
+            
+            if (chatbotId && chatbotId !== '{{ chatbot_id }}') {
+                window.location.href = `/embed/${chatbotId}`;
+            } else {
+                // フォールバック: 親ウィンドウまたはリロード
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.location.reload();
+                    } else {
+                        window.location.reload();
+                    }
+                } catch (e) {
+                    window.location.reload();
+                }
+            }
+        }
+        
+        // エラー報告（オプション）
+        function reportError() {
+            const errorInfo = {
+                url: window.location.href,
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                error_code: '{{ error_code }}',
+                message: '{{ message }}'
+            };
+            
+            // ここでエラーレポートをサーバーに送信
+            fetch('/api/error-report', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(errorInfo)
+            }).catch(err => {
+                console.error('Error reporting failed:', err);
+            });
+        }
+        
+        // 自動エラーレポート（ユーザーの同意が必要な場合は削除）
+        // reportError();
+    </script>
+</body>
+</html>
